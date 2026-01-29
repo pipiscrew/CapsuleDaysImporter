@@ -1,6 +1,7 @@
 ﻿using Finisar.SQLite;
 using System;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
@@ -9,10 +10,11 @@ namespace CapsuleDaysImporter
 {
     public partial class Form1 : Form
     {
-        
+
         public Form1()
         {
             InitializeComponent();
+            this.Text = Application.ProductName + " v" + Application.ProductVersion;
         }
 
         #region TextBox DragDrop
@@ -38,7 +40,7 @@ namespace CapsuleDaysImporter
         {
             if (!File.Exists(textBox1.Text))
             {
-                MessageBox.Show("File doesnt exist!");
+                Program.Mes("File doesnt exist!", MessageBoxIcon.Exclamation);
                 return;
             }
 
@@ -47,10 +49,11 @@ namespace CapsuleDaysImporter
 
             SQLiteCommand CMD;
             SQLiteParameterCollection Params;
-            
+
             string insertSQL = "INSERT INTO [logs] (date,modified,guid,user,color,html,text,image_count,attach_count,property) VALUES (@date,@modified,@guid,@user,@color,@html,@text,@image_count,@attach_count,@property)";
 
             int count = 0;
+            int countFailty = 0;
 
             foreach (string line in lines)
             {
@@ -60,25 +63,38 @@ namespace CapsuleDaysImporter
                     continue;
 
                 if (item.StartsWith("~"))
-                { lastDate = item.Substring(1); continue; }
+                {
+                    lastDate = item.Substring(1);
+                    continue;
+                }
+                else if (lastDate == string.Empty)
+                {
+                    lastDate = DateTime.Now.ToString("yyyy-MM-dd");
+                }
 
-                Record x = ModifyString(item);
+                Record x = Parseline(item);
+
+                if (x == null) //unable to parse the line
+                {
+                    countFailty++;
+                    continue;
+                }
 
                 CMD = new SQLiteCommand();
                 Params = CMD.Parameters;
 
-                Params.Add("@date", string.Format("{0} {1}:00", lastDate,x.time ));
+                Params.Add("@date", string.Format("{0} {1}:00", lastDate, x.time));
                 Params.Add("@modified", string.Format("{0} {1}:00", lastDate, x.time));
                 Params.Add("@guid", Guid.NewGuid().ToString());
-                Params.Add("@user", "New User"); 
+                Params.Add("@user", "New User");
                 Params.Add("@color", "#808080");
                 Params.Add("@html", x.html);
                 Params.Add("@text", x.text);
-                Params.Add("@image_count", "0"); 
+                Params.Add("@image_count", "0");
                 Params.Add("@attach_count", "0");
                 Params.Add("@property", "[]");
 
-               
+
                 CMD.CommandText = insertSQL;
                 CMD.CommandType = CommandType.Text;
                 CMD.Connection = Program.objConn;
@@ -86,17 +102,20 @@ namespace CapsuleDaysImporter
                 CMD.ExecuteScalar();
 
                 if (CMD != null)
-                {
                     CMD.Dispose();
-                }
 
                 count++;
             }
 
-            MessageBox.Show("imported " + count + " records");
+            string faultyText = string.Empty;
+
+            if (countFailty>0)
+                faultyText = "\r\n\r\n failty " + countFailty + " records";
+
+            Program.Mes("imported " + count + " records" + faultyText, countFailty > 0 ? MessageBoxIcon.Exclamation : MessageBoxIcon.Information);
         }
 
-        public Record ModifyString(string input)
+        public Record Parseline(string input)
         {
             Record rec = new Record();
             rec.html = rec.text = GetArticleWOtime(input);
@@ -114,7 +133,7 @@ namespace CapsuleDaysImporter
                 string minutes = timeParts[1];
                 rec.time = string.Format("{0}:{1}", hours, minutes);
             }
-            else 
+            else
                 return null;
 
             if (match.Success)
@@ -127,22 +146,15 @@ namespace CapsuleDaysImporter
         }
 
 
-        public static string GetArticleWOtime(string input)
+        private static string GetArticleWOtime(string input)
         {
             int spaceIndex = input.IndexOf(' ');
 
             if (spaceIndex == -1)
                 return input;
-            else 
+            else
                 return input.Substring(spaceIndex + 1);
 
-        }
-
-        public class Record
-        {
-            public string html { get; set; }
-            public string text { get; set; }
-            public string time { get; set; }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -152,6 +164,13 @@ namespace CapsuleDaysImporter
                 Program.objConn.Close();
                 Program.objConn.Dispose();
             }
+        }
+
+        public class Record
+        {
+            public string html { get; set; }
+            public string text { get; set; }
+            public string time { get; set; }
         }
     }
 }

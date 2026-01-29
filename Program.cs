@@ -1,5 +1,6 @@
 ﻿using Finisar.SQLite;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
 
@@ -17,19 +18,27 @@ namespace CapsuleDaysImporter
         {
             if (!File.Exists(dbaseFile))
             {
-                MessageBox.Show("Please move this executable near CapsuleDays dbase");
+                Mes("Please move this executable near CapsuleDays dbase.");
                 return;
-            } else { 
-                File.Copy(dbaseFile,dbaseFile + ".bak",true); //backup
+            }
+            else if (IsProcessRunning("CapsuleDays"))
+            {
+                Mes("cannot use this application while CapsuleDays is running, please close CapsuleDays.", MessageBoxIcon.Exclamation);
+                return;
+            }
+            else
+            {
+
+                File.Copy(dbaseFile, dbaseFile + ".bak", true); //backup
             }
 
-            Connect();
+            ConnectDB();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new Form1());
         }
 
-         private static void Connect()
+        private static void ConnectDB()
         {
             try
             {
@@ -38,8 +47,23 @@ namespace CapsuleDaysImporter
             }
             catch (SQLiteException ex)
             {
-                MessageBox.Show(ex.Message);
+                Mes(ex.Message, MessageBoxIcon.Error);
             }
+        }
+
+        private static bool IsProcessRunning(string processName)
+        {
+            Process[] processes = Process.GetProcessesByName(processName);
+            return processes.Length > 0;
+        }
+
+        public static DialogResult Mes(string descr, MessageBoxIcon icon = MessageBoxIcon.Information, MessageBoxButtons butt = MessageBoxButtons.OK)
+        {
+            if (descr.Length > 0)
+                return MessageBox.Show(descr, Application.ProductName, butt, icon);
+            else
+                return DialogResult.OK;
+
         }
     }
 }
